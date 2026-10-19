@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Run from repo root: python -m pytest backend/tests -v
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["backend/tests"]

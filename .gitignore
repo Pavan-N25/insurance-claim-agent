@@ -35,10 +35,11 @@ frontend/build/
 .npm
 *.log
 
-# Databases & local data
+# Databases & local data (never commit real DBs; test DB cleaned up by conftest)
 *.db
 *.sqlite
 *.sqlite3
+test_claim_agent.db
 backend/data/uploads/*
 !backend/data/uploads/.gitkeep
 backend/data/policies/*

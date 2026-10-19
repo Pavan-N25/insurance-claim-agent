@@ -359,55 +359,93 @@ insurance-claim-agent/
 
 ## Getting Started
 
-### Local Development Setup
+### Quick Commands (clean Linux machine)
 
-#### Prerequisites
-- **Python 3.12+**
-- **Node.js 20+** & **npm**
-
-#### 1. Backend Setup
 ```bash
-# Clone repository
+# 1 — Clone
 git clone https://github.com/organization/insurance-claim-agent.git
 cd insurance-claim-agent
 
-# Install Python dependencies
-python -m pip install -r backend/requirements.txt
+# 2 — Configure secrets
+cp .env.example .env
+# Edit .env: set JWT_SECRET to a random value, e.g.:
+#   python3 -c "import secrets; print(secrets.token_hex(32))"
 
-# Configure environment variables
-copy .env.example .env
+# 3 — Build & run (Docker — recommended, zero host deps needed)
+docker compose up --build
 
-# Seed database with sample policies, users, and multimodal claims
-python -m backend.seed_data
-
-# Run backend API server
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+# 4 — Test (requires Python 3.12)
+python -m pip install -r backend/requirements-dev.lock
+python -m pytest backend/tests -v
 ```
-API runs on: **`http://localhost:8000`**  
-OpenAPI Documentation: **`http://localhost:8000/docs`**
 
-#### 2. Frontend Setup
-```bash
-# Navigate to frontend folder
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-Frontend runs on: **`http://localhost:5173`**
+| Service | URL |
+|---------|-----|
+| Frontend UI | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| OpenAPI Docs | http://localhost:8000/docs |
 
 ---
 
-### Docker Compose Quickstart
-Run the entire production stack (FastAPI backend, React frontend, PostgreSQL with pgvector, and Redis) with a single command:
+### Local Development Setup (without Docker)
+
+#### Prerequisites
+- **Python 3.12** (or use `pyenv`: `.python-version` is already set)
+- **Node.js 20+** and **npm**
+
+#### 1. Backend Setup
 ```bash
-docker compose up --build
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
+# Install exact locked dependencies
+pip install -r backend/requirements-dev.lock
+
+# Configure environment variables
+cp .env.example .env
+# Set JWT_SECRET in .env (mandatory — app will not start without it)
+
+# Seed the demo database
+python -m backend.seed_data
+
+# Run the API server (hot-reload)
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-- Frontend UI: `http://localhost:5173`
-- Backend API: `http://localhost:8000/docs`
+API: **`http://localhost:8000`** · Docs: **`http://localhost:8000/docs`**
+
+#### 2. Frontend Setup
+```bash
+cd frontend
+
+# Install exact locked dependencies
+npm ci
+
+# Start Vite dev server
+npm run dev
+```
+Frontend: **`http://localhost:5173`**
+
+---
+
+### Docker Compose (full stack)
+
+```bash
+# Copy and configure environment first
+cp .env.example .env   # then edit JWT_SECRET
+
+# Build and start all services (backend, frontend, Postgres, Redis)
+docker compose up --build
+
+# Stop
+docker compose down
+```
+
+Services started:
+- **Backend** — FastAPI on port 8000
+- **Frontend** — React/Nginx on port 5173→80
+- **PostgreSQL + pgvector** — port 5432
+- **Redis 7** — port 6379
 
 ---
 
@@ -458,10 +496,13 @@ All endpoints are versioned under `/api/v1` and documentable at `/docs`:
 
 ## Automated Testing & CI/CD
 
-Run the test suite locally:
+One command runs the full test suite from the repo root:
+
 ```bash
-python -m pytest backend/tests
+python -m pytest backend/tests -v
 ```
+
+> **Note:** Run from the repo root (not `backend/`). `pyproject.toml` sets `PYTHONPATH=.` automatically so `from backend.app...` imports resolve correctly. `conftest.py` boots an in-memory SQLite database and seeds demo data — no pre-existing `.env` or database needed.
 All unit and integration tests execute across:
 - `test_intake_agent`: Modality identification and validation.
 - `test_fraud_agent_duplicate_image`: Hamming distance perceptual dHash collision detection.

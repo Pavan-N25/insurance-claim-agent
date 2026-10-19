@@ -3,8 +3,10 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY frontend/package.json ./
-RUN npm install
+# Copy lockfile first for layer caching
+COPY frontend/package.json frontend/package-lock.json ./
+# npm ci installs exact locked versions — never install ranges
+RUN npm ci
 
 COPY frontend ./
 RUN npm run build
