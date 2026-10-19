@@ -2,13 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.app.core.database import get_db
+from backend.app.core.security import get_current_user_payload
 from backend.app.models.schema import Claim, FraudSignal
 from backend.app.services.fraud_graph_service import FraudGraphService
 
 router = APIRouter(prefix="/fraud", tags=["Fraud & Anomaly Intelligence"])
 
 @router.get("/overview")
-def get_fraud_overview(db: Session = Depends(get_db)):
+def get_fraud_overview(
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     total_claims = db.query(Claim).count()
     flagged_claims = db.query(Claim).filter(Claim.fraud_score >= 60).count()
     critical_signals = db.query(FraudSignal).filter(FraudSignal.severity == "CRITICAL").count()
@@ -46,5 +50,9 @@ def get_fraud_overview(db: Session = Depends(get_db)):
     }
 
 @router.get("/network-graph/{claim_id}")
-def get_network_graph(claim_id: str, db: Session = Depends(get_db)):
+def get_network_graph(
+    claim_id: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     return FraudGraphService.get_claim_graph_data(db, claim_id)

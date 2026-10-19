@@ -1,17 +1,22 @@
 import os
 from typing import List, Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     APP_ENV: str = "development"
-    DEBUG: bool = True
+    DEBUG: bool = False
     PORT: int = 8000
     FRONTEND_PORT: int = 5173
 
-    # Security
-    JWT_SECRET: str = "production_super_secret_jwt_key_replace_in_prod_934184910283"
+    # Security — JWT_SECRET has NO default. The app will refuse to start
+    # unless this is set via environment variable or .env file.
+    JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # CORS — comma-separated list of allowed frontend origins
+    # Example: "http://localhost:5173,https://yourdomain.com"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     # Database
     DATABASE_URL: str = "sqlite:///./claim_agent.db"
@@ -45,9 +50,10 @@ class Settings(BaseSettings):
     MAPS_API_KEY: Optional[str] = None
     EMAIL_API_KEY: Optional[str] = None
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="allow",
+    )
 
 settings = Settings()
 

@@ -7,7 +7,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword123
+      # Set POSTGRES_PASSWORD in your shell or a .env file — never hardcode here
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: insurance_claim_db
     ports:
       - "5432:5432"
@@ -33,11 +34,13 @@ services:
     container_name: insur_claim_backend
     restart: always
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgrespassword123@postgres:5432/insurance_claim_db
+      # Use a .env file or export these vars before running docker-compose up
+      - DATABASE_URL=postgresql+psycopg2://postgres:${POSTGRES_PASSWORD}@postgres:5432/insurance_claim_db
       - REDIS_URL=redis://redis:6379/0
-      - LLM_PROVIDER=local
-      - JWT_SECRET=production_super_secret_jwt_key_replace_in_prod_934184910283
-      - APP_ENV=production
+      - LLM_PROVIDER=${LLM_PROVIDER:-local}
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_ENV=${APP_ENV:-production}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173}
     ports:
       - "8000:8000"
     volumes:

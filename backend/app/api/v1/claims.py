@@ -1,13 +1,14 @@
 import os
 import uuid
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.config import settings
+from backend.app.core.security import get_current_user_payload
 from backend.app.models.schema import (
     Claim, Document, DamageAssessment, FraudSignal, AIDecision,
     HumanReview, AuditLog, Policy
@@ -23,7 +24,11 @@ from backend.app.services.image_hash_service import ImageHashService
 router = APIRouter(prefix="/claims", tags=["Claims"])
 
 @router.post("")
-def create_claim(req: ClaimCreateRequest, db: Session = Depends(get_db)):
+def create_claim(
+    req: ClaimCreateRequest,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     # Generate human-friendly ID: CLM-2026-XXXX
     short_id = f"CLM-2026-{uuid.uuid4().hex[:4].upper()}"
     
@@ -67,7 +72,8 @@ def list_claims(
     priority: Optional[str] = None,
     search: Optional[str] = None,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
 ):
     query = db.query(Claim)
     if status and status != "ALL":
@@ -84,7 +90,11 @@ def list_claims(
     return claims
 
 @router.get("/{claim_id}")
-def get_claim(claim_id: str, db: Session = Depends(get_db)):
+def get_claim(
+    claim_id: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -111,7 +121,8 @@ async def upload_document(
     claim_id: str,
     file: UploadFile = File(...),
     doc_category: str = Form("other"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
 ):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
@@ -165,7 +176,11 @@ async def upload_document(
     return new_doc
 
 @router.post("/{claim_id}/analyze")
-async def analyze_claim(claim_id: str, db: Session = Depends(get_db)):
+async def analyze_claim(
+    claim_id: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -189,7 +204,7 @@ async def analyze_claim(claim_id: str, db: Session = Depends(get_db)):
     ]
 
     # Gather historical perceptual hashes from other claims
-    historical_docs = db.query(Document).filter(Document.claim_id != claim_id, Document.perceptual_hash != None).all()
+    historical_docs = db.query(Document).filter(Document.claim_id != claim_id, Document.perceptual_hash.isnot(None)).all()
     hist_hashes = [{"claim_id": h.claim_id, "hash": h.perceptual_hash} for h in historical_docs]
 
     # Gather entity cluster signals
@@ -320,7 +335,11 @@ async def analyze_claim(claim_id: str, db: Session = Depends(get_db)):
     }
 
 @router.get("/{claim_id}/timeline")
-def get_claim_timeline(claim_id: str, db: Session = Depends(get_db)):
+def get_claim_timeline(
+    claim_id: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -338,7 +357,11 @@ def get_claim_timeline(claim_id: str, db: Session = Depends(get_db)):
     )
 
 @router.get("/{claim_id}/similar")
-def get_similar_claims(claim_id: str, db: Session = Depends(get_db)):
+def get_similar_claims(
+    claim_id: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     """
     Returns similar historical claims with similarity %, amount, outcome, and resolution duration.
     """
@@ -367,7 +390,12 @@ def get_similar_claims(claim_id: str, db: Session = Depends(get_db)):
     return results
 
 @router.post("/{claim_id}/review")
-def review_claim(claim_id: str, req: HumanReviewRequest, db: Session = Depends(get_db)):
+def review_claim(
+    claim_id: str,
+    req: HumanReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_payload),
+):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -378,10 +406,13 @@ def review_claim(claim_id: str, req: HumanReviewRequest, db: Session = Depends(g
     if is_override and not req.override_reason:
         raise HTTPException(status_code=400, detail="Reviewer reason is mandatory when overriding AI recommendation.")
 
+    reviewer_id = str(current_user.get("user_id", "unknown"))
+    reviewer_name = current_user.get("name", "Unknown Reviewer")
+
     review = HumanReview(
         claim_id=claim_id,
-        reviewer_id="USR-ADJUSTER-01",
-        reviewer_name="Senior Adjuster V. Menon",
+        reviewer_id=reviewer_id,
+        reviewer_name=reviewer_name,
         human_decision=req.human_decision,
         ai_decision_at_time=old_status,
         override_ai=is_override,
@@ -395,7 +426,7 @@ def review_claim(claim_id: str, req: HumanReviewRequest, db: Session = Depends(g
         claim_id=claim_id,
         event_type="HUMAN_REVIEW_SUBMITTED",
         actor="HUMAN_REVIEWER",
-        actor_id="V. Menon",
+        actor_id=reviewer_id,
         details={
             "human_decision": req.human_decision,
             "override_ai": is_override,
@@ -408,7 +439,11 @@ def review_claim(claim_id: str, req: HumanReviewRequest, db: Session = Depends(g
     return {"status": "SUCCESS", "claim": claim, "review": review}
 
 @router.get("/{claim_id}/report")
-def generate_claim_report(claim_id: str, db: Session = Depends(get_db)):
+def generate_claim_report(
+    claim_id: str,
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     claim = db.query(Claim).filter(Claim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
@@ -422,7 +457,7 @@ def generate_claim_report(claim_id: str, db: Session = Depends(get_db)):
 
     return {
         "report_id": f"REP-{claim_id}",
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "claim": {
             "id": claim.id,
             "policy_number": claim.policy_number,

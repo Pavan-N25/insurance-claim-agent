@@ -2,12 +2,16 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from backend.app.core.database import get_db
+from backend.app.core.security import get_current_user_payload
 from backend.app.models.schema import Claim, HumanReview, AIDecision
 
 router = APIRouter(prefix="/analytics", tags=["Executive Analytics"])
 
 @router.get("/dashboard")
-def get_analytics_dashboard(db: Session = Depends(get_db)):
+def get_analytics_dashboard(
+    db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user_payload),
+):
     total_claims = db.query(Claim).count()
     auto_approved = db.query(Claim).filter(Claim.status == "AUTO_APPROVED").count()
     manual_review = db.query(Claim).filter(Claim.status == "MANUAL_REVIEW").count()
@@ -19,14 +23,14 @@ def get_analytics_dashboard(db: Session = Depends(get_db)):
 
     # Human Overrides
     total_reviews = db.query(HumanReview).count()
-    overrides = db.query(HumanReview).filter(HumanReview.override_ai == True).count()
+    overrides = db.query(HumanReview).filter(HumanReview.override_ai.is_(True)).count()
     override_rate = round((overrides / max(1, total_reviews)) * 100, 1)
 
     # Claims by Type
     by_type = db.query(Claim.claim_type, func.count(Claim.id)).group_by(Claim.claim_type).all()
     type_distribution = [{"type": t[0], "count": t[1]} for t in by_type]
 
-    # Geographic Risk Heatmap
+    # TODO: Replace hardcoded geographic data with real claims geo-tagging
     locations = [
         {"city": "Bengaluru", "region": "South", "claims": 18, "risk_score": 38, "lat": 12.9716, "lng": 77.5946},
         {"city": "Mumbai", "region": "West", "claims": 24, "risk_score": 62, "lat": 19.0760, "lng": 72.8777},

@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from backend.app.core.database import get_db
 from backend.app.core.config import settings
-from backend.app.models.schema import AdminConfig
+from backend.app.core.security import get_current_user_payload, require_role
 
 router = APIRouter(prefix="/admin", tags=["Admin Configuration"])
 
@@ -17,7 +15,7 @@ class ConfigUpdateRequest(BaseModel):
     llm_provider: str = "local"
 
 @router.get("/configs")
-def get_configs():
+def get_configs(_: dict = Depends(get_current_user_payload)):
     return {
         "fraud_flag_threshold": settings.FRAUD_FLAG_THRESHOLD,
         "high_value_threshold_inr": settings.HIGH_VALUE_THRESHOLD_INR,
@@ -37,7 +35,10 @@ def get_configs():
     }
 
 @router.put("/configs")
-def update_configs(req: ConfigUpdateRequest):
+def update_configs(
+    req: ConfigUpdateRequest,
+    _: dict = Depends(require_role(["admin"])),
+):
     settings.FRAUD_FLAG_THRESHOLD = req.fraud_flag_threshold
     settings.HIGH_VALUE_THRESHOLD_INR = req.high_value_threshold_inr
     settings.MIN_CONFIDENCE_AUTO_APPROVE = req.min_confidence_auto_approve

@@ -1,5 +1,6 @@
 import os
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -22,21 +23,41 @@ logger = logging.getLogger("InsuranceClaimAgent")
 # Initialize database schema tables
 Base.metadata.create_all(bind=engine)
 
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Handles startup and shutdown lifecycle events."""
+    # --- Startup ---
+    try:
+        from backend.seed_data import seed_database
+        seed_database()
+    except Exception as e:
+        logger.warning(f"Startup seeding notice: {e}")
+    yield
+    # --- Shutdown (add cleanup here if needed) ---
+
+
+# Only expose interactive docs in non-production environments
+_docs_url = "/docs" if settings.APP_ENV != "production" else None
+_redoc_url = "/redoc" if settings.APP_ENV != "production" else None
+
 app = FastAPI(
     title="Multimodal Insurance Claim Triage AI Agent API",
     description="Enterprise multi-agent system for automated multimodal insurance claim triage, fraud detection, and explainable decision support.",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    lifespan=lifespan,
 )
 
-# CORS configuration
+# CORS configuration — only allow explicitly configured origins
+_allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # Mount static uploads directory for serving damage photos and annotated images
@@ -66,18 +87,13 @@ def health_check():
 
 @app.get("/")
 def root():
-    return {
+    response = {
         "name": "Multimodal Insurance Claim Triage AI Agent Platform",
         "version": "1.0.0",
-        "docs": "/docs",
         "health": "/health"
     }
+    if settings.APP_ENV != "production":
+        response["docs"] = "/docs"
+    return response
 
-# Run seed data automatically on startup if database is empty
-@app.on_event("startup")
-def startup_seed():
-    try:
-        from backend.seed_data import seed_database
-        seed_database()
-    except Exception as e:
-        logger.warning(f"Startup seeding notice: {e}")
+
